@@ -42,7 +42,7 @@ std::string GetLastErrorStr() {
 // ===================== DownloadTask =====================
 
 DownloadTask::DownloadTask(std::vector<std::string> urls, std::string local_path)
-    : local_path(std::move(local_path)) {
+    : local_path(Utf8ToWs(std::move(local_path))) {
     std::sort(urls.begin(), urls.end());
     urls.erase(std::unique(urls.begin(), urls.end()), urls.end());
     int id = 0;
@@ -372,7 +372,7 @@ bool DownloadTask::MergeFiles() {
             // rename 失败 (跨卷等) → 复制后删除
             std::error_code ec2;
             fs::copy_file(p.part_path, local_path, ec2);
-            if (ec2) { error_ = "合并分片失败: " + local_path + " (" + ec2.message() + ")"; return false; }
+            if (ec2) { error_ = "合并分片失败: " + WsToUtf8(local_path) + " (" + ec2.message() + ")"; return false; }
             fs::remove(p.part_path, ec2);
         }
         return true;
@@ -381,8 +381,8 @@ bool DownloadTask::MergeFiles() {
     // 按最终链表边界精确截取每个分片: 每个分片文件覆盖 [start, end]
     // (切分竞态下旧线程文件可能包含越过新边界的尾部, 这里只取前 (end-start+1) 字节, 丢弃越界数据)
     FILE* out = nullptr;
-    if (fopen_s(&out, local_path.c_str(), "wb") != 0 || !out) {
-        error_ = "无法创建目标文件: " + local_path;
+    if (_wfopen_s(&out, local_path.c_str(), L"wb") != 0 || !out) {
+        error_ = "无法创建目标文件: " + WsToUtf8(local_path);
         return false;
     }
     bool ok = true;
@@ -395,7 +395,7 @@ bool DownloadTask::MergeFiles() {
             std::int64_t expect = end - p.start + 1;   // 该分片应有的字节数
             if (p.done.load() < expect) { ok = false; break; }  // 分片数据不足
             FILE* in = nullptr;
-            if (fopen_s(&in, p.part_path.c_str(), "rb") != 0 || !in) { ok = false; break; }
+            if (_wfopen_s(&in, p.part_path.c_str(), L"rb") != 0 || !in) { ok = false; break; }
             // 调试: 校验分片文件大小
             fseek(in, 0, SEEK_END);
             std::int64_t file_sz = ftell(in);
@@ -415,7 +415,7 @@ bool DownloadTask::MergeFiles() {
         }
     }
     fclose(out);
-    if (!ok) { error_ = "合并分片失败: " + local_path; return false; }
+    if (!ok) { error_ = "合并分片失败: " + WsToUtf8(local_path); return false; }
     return true;
 }
 
@@ -448,16 +448,16 @@ void DownloadEngine::Worker(Ctx ctx) {
         if (!src) {
             piece.failed = true;
             task.task_failed_ = true;
-            task.error_ = "所有下载源均失败: " + task.local_path;
+            task.error_ = "所有下载源均失败: " + WsToUtf8(task.local_path);
             break;
         }
 
         // 分片临时文件 (追加模式, 断点续传)
         FILE* part = nullptr;
-        if (fopen_s(&part, piece.part_path.c_str(), "ab") != 0 || !part) {
+        if (_wfopen_s(&part, piece.part_path.c_str(), L"ab") != 0 || !part) {
             piece.failed = true;
             task.task_failed_ = true;
-            task.error_ = "无法创建分片文件: " + piece.part_path;
+            task.error_ = "无法创建分片文件: " + WsToUtf8(piece.part_path);
             break;
         }
 
@@ -481,12 +481,12 @@ void DownloadEngine::Worker(Ctx ctx) {
                 long cur = ftell(part);
                 if (cur != piece.done.load()) {
                     if (!engine.opt.quiet) {
-                        printf("  [BUG] %s: ftell=%ld done=%lld 文件被其他写入者占用!\n",
+                        printf("  [BUG] %ls: ftell=%ld done=%lld 文件被其他写入者占用!\n",
                                piece.part_path.c_str(), cur, (long long)piece.done.load());
                     }
                     piece.failed = true;
                     task.task_failed_ = true;
-                    task.error_ = "分片文件写入位置冲突: " + piece.part_path;
+                    task.error_ = "分片文件写入位置冲突: " + WsToUtf8(piece.part_path);
                     return false;
                 }
                 if (!unknown_size && pos > end) return false;  // 已知大小: 到边界停止
@@ -540,7 +540,7 @@ bool DownloadEngine::TryBeginThread(DownloadTask& task) {
 
         // 2. 首线程: 从偏移 0 开始, 覆盖全文件 (之后动态切分)
         if (task.pieces.empty()) {
-            auto p = std::make_unique<Piece>(0, task.local_path + ".part0");
+            auto p = std::make_unique<Piece>(0, task.local_path + L".part0");
             new_piece = p.get();
             task.pieces.push_back(std::move(p));
         } else {
@@ -563,7 +563,7 @@ bool DownloadEngine::TryBeginThread(DownloadTask& task) {
             std::int64_t piece_end = task.PieceEndLocked(*max_piece);
             if (split >= piece_end) return false;
 
-            auto p = std::make_unique<Piece>(split, task.local_path + ".part" + std::to_string(task.pieces.size()));
+            auto p = std::make_unique<Piece>(split, task.local_path + L".part" + std::to_wstring(task.pieces.size()));
             new_piece = p.get();
             // 插入到 max_piece 之后 (链表有序)
             for (size_t i = 0; i < task.pieces.size(); ++i) {
@@ -590,17 +590,19 @@ std::int64_t DownloadEngine::AvgConnectMs() const {
 // 删除 <文件名>.part* 分片残留 (不动目标文件本身)
 // worker 线程可能仍持有文件句柄 (WinHttpReadData 阻塞中), 删除失败时重试等待
 void DownloadEngine::CleanupPartFiles(const std::string& local_path) {
+    // 路径转宽字符 (UTF-8 → UTF-16), 否则中文路径下 filesystem 抛 "Illegal byte sequence"
+    std::wstring wpath = Utf8ToWs(local_path);
     std::error_code ec;
-    fs::path parent = fs::path(local_path).parent_path();
-    std::string base = fs::path(local_path).filename().string();
-    if (parent.empty()) parent = ".";
+    fs::path parent = fs::path(wpath).parent_path();
+    std::wstring base = fs::path(wpath).filename().wstring();
+    if (parent.empty()) parent = L".";
     if (!fs::exists(parent, ec)) return;
 
     // 收集目标分片文件
     std::vector<fs::path> targets;
     for (const auto& entry : fs::directory_iterator(parent)) {
-        std::string name = entry.path().filename().string();
-        if (name.rfind(base + ".part", 0) == 0) {
+        std::wstring name = entry.path().filename().wstring();
+        if (name.rfind(base + L".part", 0) == 0) {
             targets.push_back(entry.path());
         }
     }
@@ -624,7 +626,7 @@ void DownloadEngine::CleanupFailedDownload(const std::string& local_path) {
     DownloadEngine::CleanupPartFiles(local_path);
     // 删除半成品输出文件 (下载失败时生成的)
     std::error_code ec;
-    fs::remove(local_path, ec);
+    fs::remove(Utf8ToWs(local_path), ec);
 }
 
 bool DownloadEngine::Download(std::vector<std::string> urls, const std::string& local_path,
@@ -656,6 +658,7 @@ int DownloadEngine::DownloadOnce(std::vector<std::string> urls, const std::strin
     // 1. 探测
     if (!task.ProbeSize()) {
         if (!opt.quiet) printf("  错误: %s\n", task.error_.c_str());
+        if (opt.on_error) opt.on_error(task.error_);
         // 探测失败分两类:
         //  - HTTP 4xx (URL 不存在等): 重试无意义 → 返回 2 不可重试
         //  - 其他 (5xx 服务器故障/网络错误/超时): 可能临时性故障 → 返回 1 可重试
@@ -679,6 +682,7 @@ int DownloadEngine::DownloadOnce(std::vector<std::string> urls, const std::strin
     engine.tokens = (opt.speed_cap > 0 ? opt.speed_cap : 0);  // 初始配额
     if (!engine.TryBeginThread(task)) {
         if (!opt.quiet) printf("  错误: %s\n", task.error_.empty() ? "无法启动下载线程" : task.error_.c_str());
+        if (opt.on_error) opt.on_error(task.error_.empty() ? "无法启动下载线程" : task.error_);
         return 2;
     }
 
@@ -791,6 +795,7 @@ int DownloadEngine::DownloadOnce(std::vector<std::string> urls, const std::strin
 
     if (task.HasFailed()) {
         if (!opt.quiet) printf("  错误: %s\n", task.error_.c_str());
+        if (opt.on_error) opt.on_error(task.error_);
         if (opt.on_progress) opt.on_progress(task.TotalDone(), task.file_size(), speed.load());
         // 等所有 worker 线程退出并释放文件句柄, 再清理分片 (否则删除会因占用失败)
         for (int i = 0; i < 100 && engine.thread_count.load() > 0; ++i) {
@@ -803,6 +808,7 @@ int DownloadEngine::DownloadOnce(std::vector<std::string> urls, const std::strin
     // 5. 合并分片
     if (!task.MergeFiles()) {
         if (!opt.quiet) printf("  错误: %s\n", task.error_.c_str());
+        if (opt.on_error) opt.on_error(task.error_);
         CleanupFailedDownload(local_path);  // 合并失败同样清理
         return 1;  // 可重试
     }

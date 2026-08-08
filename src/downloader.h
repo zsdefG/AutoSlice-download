@@ -30,12 +30,12 @@ struct Source {
 // ===== 分片 (对应 PCL NetThread) =====
 struct Piece {
     std::int64_t start = 0;       // 起始偏移 (固定)
-    std::string part_path;        // 分片临时文件
+    std::wstring part_path;       // 分片临时文件 (宽字符, 支持中文路径)
     std::atomic<std::int64_t> done{0};  // 已下载字节
     std::atomic<bool> finished{false};
     std::atomic<bool> failed{false};
 
-    Piece(std::int64_t s, std::string path) : start(s), part_path(std::move(path)) {}
+    Piece(std::int64_t s, std::wstring path) : start(s), part_path(std::move(path)) {}
 };
 
 // ===== 文件下载任务 (对应 PCL NetFile) =====
@@ -72,7 +72,7 @@ public:
     std::vector<std::unique_ptr<Piece>> pieces;  // 有序链表 (按 start)
     mutable std::mutex chain_mtx;                // 保护 pieces 链表
     mutable std::mutex src_mtx;                  // 保护源轮询
-    std::string local_path;
+    std::wstring local_path;                     // 目标文件路径 (宽字符, 支持中文路径)
     std::string error_;
     std::atomic<bool> task_failed_{false};
     std::int64_t file_size_ = -2;                // -2 未探测, -1 未知大小
@@ -100,6 +100,8 @@ struct DownloadOptions {
     std::atomic<bool>* cancel_flag = nullptr;  // 非空时, 调度/下载循环定期检查, true 则立即取消
     bool quiet = false;                        // 不打印日志
     std::function<void(std::int64_t done, std::int64_t total, std::int64_t speed_bps)> on_progress;
+    // 错误回调: 探测/下载/合并失败时调用 (携带完整错误文本), 供 GUI 等界面层显示
+    std::function<void(const std::string&)> on_error;
 };
 
 // ===== 下载引擎 (对应 PCL NetManager) =====

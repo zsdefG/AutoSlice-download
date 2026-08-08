@@ -60,11 +60,12 @@ static void PrintProgress(std::int64_t done, std::int64_t total, std::int64_t sp
 }
 
 static int SelfTest(const std::string& dir) {
-    // 生成一个 12MB 随机测试文件
-    const std::string src = dir + "/test_src.bin";
+    // 生成一个 12MB 随机测试文件 (宽字符路径, 支持中文目录)
+    std::wstring wdir = pcl_dl::Utf8ToWs(dir);
+    std::wstring wsrc = wdir + L"/test_src.bin";
     {
         FILE* f = nullptr;
-        if (fopen_s(&f, src.c_str(), "wb") != 0 || !f) { printf("无法创建测试文件\n"); return 1; }
+        if (_wfopen_s(&f, wsrc.c_str(), L"wb") != 0 || !f) { printf("无法创建测试文件\n"); return 1; }
         srand(12345);
         char buf[64 * 1024];
         for (int i = 0; i < 12 * 1024 * 1024 / (int)sizeof(buf); ++i) {
@@ -73,6 +74,7 @@ static int SelfTest(const std::string& dir) {
         }
         fclose(f);
     }
+    const std::string src = dir + "/test_src.bin";
     printf("[自测] 已生成 12MB 源文件: %s\n", src.c_str());
 
     // 计算 SHA-256 (简单实现: 用 md5 替代不可行, 这里直接比对字节)
@@ -158,14 +160,16 @@ static void InitOutputEncoding() {
     SetConsoleCP(CP_UTF8);
 }
 
-int main(int argc, char* argv[]) {
+// Wide-char entry: parse args as UTF-16 so Chinese paths work (ANSI/GBK argv mangles them)
+int wmain(int argc, wchar_t* argv[]) {
     InitOutputEncoding();
     // 注册 Ctrl+C / 关闭窗口处理器, 中断时清理分片残留
     SetConsoleCtrlHandler(CtrlHandler, TRUE);
     // atexit 兜底: 任何正常退出路径都清理残留分片
     atexit(AtExitCleanup);
 
-    std::vector<std::string> args(argv + 1, argv + argc);
+    std::vector<std::string> args;
+    for (int i = 1; i < argc; ++i) args.push_back(pcl_dl::WsToUtf8(argv[i]));
     pcl_dl::DownloadOptions opt;
     std::string output;
     std::vector<std::string> urls;

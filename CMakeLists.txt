@@ -13,5 +13,16 @@ add_executable(downloader
     src/downloader.cpp
 )
 
-target_compile_options(downloader PRIVATE -O2 -Wall -Wextra)
+target_compile_options(downloader PRIVATE -O2 -Wall -Wextra -municode)
+target_link_options(downloader PRIVATE -municode)
 target_link_libraries(downloader PRIVATE winhttp)
+
+# Win32 GUI 版 (复用同一引擎, 无控制台窗口)
+add_executable(downloadergui
+    src/gui.cpp
+    src/downloader.cpp
+)
+
+target_compile_options(downloadergui PRIVATE -O2 -Wall -Wextra -municode)
+target_link_options(downloadergui PRIVATE -municode)
+target_link_libraries(downloadergui PRIVATE winhttp comctl32)
