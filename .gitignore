@@ -1,0 +1,12 @@
+# 构建产物
+build/
+*.exe
+
+# 编辑器/IDE 配置
+.vscode/
+
+# 测试临时文件
+test/*.bin
+test/*.part*
+test/*.log
+test/dl*.txt
