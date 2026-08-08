@@ -1,5 +1,5 @@
-# 构建产物
-build/
+# 构建产物 (仅根目录)
+/build/
 *.exe
 
 # 编辑器/IDE 配置
@@ -10,3 +10,15 @@ test/*.bin
 test/*.part*
 test/*.log
 test/dl*.txt
+test/*.txt
+
+# WebView2 SDK 缓存与多架构 (只提交 include + x64 dll)
+third_party/webview2/*.nupkg
+third_party/webview2/t.cpp
+third_party/webview2/build/native/x86/
+third_party/webview2/build/native/arm64/
+third_party/webview2/build/native/include-winrt/
+third_party/webview2/lib/
+third_party/webview2/lib_manual/
+third_party/webview2/runtimes/
+third_party/webview2/tools/

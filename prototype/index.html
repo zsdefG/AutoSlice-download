@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoSlice-download — 界面原型</title>
+<style>
+/* ============ 设计令牌 ============ */
+:root {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --ink: #1c1f24;
+  --ink-2: #5a6069;
+  --ink-3: #8a9099;
+  --line: #dfe2e8;
+  --line-2: #c6cbd3;
+  --blue: #175ea8;
+  --blue-deep: #0e3f74;
+  --blue-soft: #e7f0fa;
+  --teal: #0e6e56;
+  --teal-soft: #e3f2ec;
+  --red: #a32d2d;
+  --red-soft: #faeceb;
+  --amber: #854f0b;
+  --amber-soft: #faf0dd;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+[data-theme="dark"] {
+  --bg: #17191d;
+  --panel: #1f2227;
+  --ink: #e8eaee;
+  --ink-2: #a7adb6;
+  --ink-3: #6f7680;
+  --line: #2e323a;
+  --line-2: #3d434d;
+  --blue: #4f9be0;
+  --blue-deep: #8fc0ee;
+  --blue-soft: #1c2c40;
+  --teal: #3fba97;
+  --teal-soft: #12342a;
+  --red: #e07a6e;
+  --red-soft: #3a2020;
+  --amber: #d9a25a;
+  --amber-soft: #3a2d17;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+  transition: background .3s var(--ease), color .3s var(--ease);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(12px, 3vw, 32px);
+}
+.window {
+  width: min(720px, 100%);
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: 0 1px 0 rgba(16,20,26,.03), 0 8px 32px rgba(16,20,26,.06);
+  overflow: hidden;
+  transition: background .3s var(--ease);
+}
+/* ============ 标题栏 ============ */
+.titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--blue);
+  display: grid; place-items: center;
+  color: #fff; font-weight: 700; font-size: 12px;
+  font-family: var(--mono);
+}
+.brand-name { font-weight: 600; font-size: 14px; letter-spacing: .2px; }
+.brand-sub { font-size: 12px; color: var(--ink-3); font-family: var(--mono); }
+.title-actions { display: flex; align-items: center; gap: 8px; }
+.icon-btn {
+  border: 1px solid var(--line);
+  background: transparent; color: var(--ink-2);
+  width: 30px; height: 30px; border-radius: 8px;
+  cursor: pointer; font-size: 13px;
+  display: grid; place-items: center;
+  transition: background .15s var(--ease), border-color .15s var(--ease);
+}
+.icon-btn:hover { background: var(--blue-soft); border-color: var(--line-2); color: var(--blue); }
+
+/* ============ 内容 ============ */
+.body { padding: clamp(16px, 3vw, 24px); display: flex; flex-direction: column; gap: clamp(16px, 2.6vw, 24px); }
+
+.section { display: flex; flex-direction: column; gap: 8px; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; }
+.section-title { font-size: 13px; font-weight: 600; letter-spacing: .3px; }
+.section-hint { font-size: 12px; color: var(--ink-3); }
+
+textarea {
+  width: 100%; resize: vertical;
+  min-height: 76px;
+  font-family: var(--mono); font-size: 13px;
+  color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line-2); border-radius: var(--r-md);
+  padding: 10px 12px;
+  transition: border-color .15s var(--ease), box-shadow .15s var(--ease);
+}
+textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent); }
+
+.row { display: flex; gap: 10px; }
+input[type="text"] {
+  flex: 1; min-width: 0;
+  font-family: var(--mono); font-size: 13px;
+  color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line-2); border-radius: var(--r-md);
+  padding: 9px 12px;
+  transition: border-color .15s var(--ease), box-shadow .15s var(--ease);
+}
+input[type="text"]:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent); }
+
+.btn {
+  border: 1px solid var(--line-2); background: transparent;
+  color: var(--ink); font-family: var(--sans);
+  font-size: 13px; font-weight: 500;
+  padding: 9px 16px; border-radius: var(--r-md);
+  cursor: pointer; white-space: nowrap;
+  transition: background .15s var(--ease), border-color .15s var(--ease), color .15s var(--ease);
+}
+.btn:hover { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.btn-primary {
+  background: var(--blue); border-color: var(--blue); color: #fff;
+  font-size: 14px; padding: 10px 22px;
+}
+.btn-primary:hover { background: var(--blue-deep); border-color: var(--blue-deep); color: #fff; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn:disabled:hover { background: transparent; border-color: var(--line-2); color: var(--ink); }
+
+/* 高级选项 */
+details { border: 1px solid var(--line); border-radius: var(--r-md); }
+details > summary {
+  cursor: pointer; list-style: none;
+  padding: 9px 12px; font-size: 13px; color: var(--ink-2);
+  display: flex; align-items: center; gap: 8px;
+}
+details > summary::before {
+  content: ""; width: 7px; height: 7px;
+  border-right: 1.5px solid var(--ink-3); border-bottom: 1.5px solid var(--ink-3);
+  transform: rotate(-45deg); transition: transform .2s var(--ease);
+  display: inline-block;
+}
+details[open] > summary::before { transform: rotate(45deg); }
+details > summary:hover { color: var(--ink); }
+.adv-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  padding: 4px 12px 14px;
+}
+.adv-field { display: flex; flex-direction: column; gap: 5px; }
+.adv-field label { font-size: 12px; color: var(--ink-3); }
+.adv-field input {
+  font-family: var(--mono); font-size: 13px;
+  border: 1px solid var(--line-2); border-radius: 8px;
+  background: var(--panel); color: var(--ink);
+  padding: 7px 10px;
+}
+.adv-field input:focus { outline: none; border-color: var(--blue); }
+
+/* 操作行 */
+.actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* 进度面板 */
+.gauge {
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: clamp(14px, 2.4vw, 20px);
+  display: flex; flex-direction: column; gap: 14px;
+}
+.gauge-top { display: flex; align-items: center; justify-content: space-between; }
+.gauge-label { font-size: 13px; font-weight: 600; }
+.led {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; font-weight: 600;
+  padding: 4px 11px; border-radius: 999px;
+  border: 1px solid transparent;
+}
+.led .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.led-idle { color: var(--ink-2); background: color-mix(in srgb, var(--ink-2) 8%, transparent); }
+.led-busy { color: var(--blue); background: var(--blue-soft); }
+.led-busy .dot { animation: pulse 1.1s ease-in-out infinite; }
+.led-ok { color: var(--teal); background: var(--teal-soft); }
+.led-err { color: var(--red); background: var(--red-soft); }
+.led-cancel { color: var(--amber); background: var(--amber-soft); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+.bar-track {
+  height: 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--ink-2) 14%, transparent);
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%; width: 0%;
+  background: var(--blue);
+  border-radius: 999px;
+  transition: width .25s var(--ease);
+}
+.bar-fill.indet {
+  width: 34%;
+  animation: slide 1.3s ease-in-out infinite;
+}
+@keyframes slide { 0% { transform: translateX(-110%); } 100% { transform: translateX(300%); } }
+
+.metrics {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+.metric .k { font-size: 12px; color: var(--ink-3); }
+.metric .v { font-size: 19px; font-weight: 600; font-family: var(--mono); letter-spacing: -.4px; }
+.metric .v small { font-size: 12px; color: var(--ink-3); font-weight: 400; }
+
+/* 日志 */
+.log-box {
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--panel);
+  font-family: var(--mono); font-size: 12px;
+  line-height: 1.9;
+  padding: 10px 12px;
+  max-height: 180px; overflow-y: auto;
+  color: var(--ink-2);
+}
+.log-box .ok { color: var(--teal); }
+.log-box .err { color: var(--red); }
+.log-box .info { color: var(--ink-3); }
+
+/* 保存位置对话框 */
+.modal-mask {
+  position: fixed; inset: 0;
+  background: rgba(16, 20, 26, .45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50; padding: 20px;
+  animation: fadeIn .18s var(--ease);
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+  width: min(420px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  animation: pop .22s var(--ease);
+}
+@keyframes pop { from { transform: translateY(8px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid var(--line);
+  font-weight: 600; font-size: 14px;
+}
+.modal-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); }
+.loc-bar {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 12px;
+}
+.loc-bar .crumb { color: var(--ink-2); }
+.loc-bar .crumb:last-child { color: var(--ink); font-weight: 600; }
+.loc-list {
+  border: 1px solid var(--line-2); border-radius: var(--r-md);
+  overflow: hidden; display: flex; flex-direction: column;
+  max-height: 200px; overflow-y: auto;
+}
+.loc-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; cursor: pointer;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono); font-size: 13px;
+  transition: background .12s var(--ease);
+}
+.loc-item:last-child { border-bottom: none; }
+.loc-item:hover { background: var(--blue-soft); color: var(--blue); }
+.loc-item .ic { width: 16px; height: 12px; border-radius: 2px; background: var(--amber); position: relative; flex: none; }
+.loc-item .ic::before { content: ""; position: absolute; top: 2px; left: 2px; right: 2px; height: 3px; border-radius: 1px; background: color-mix(in srgb, var(--amber) 40%, #fff); }
+.loc-item .ic.drive { background: var(--blue); }
+.loc-item .ic.drive::before { background: color-mix(in srgb, var(--blue) 35%, #fff); }
+
+/* ============ 响应式 ============ */
+@media (max-width: 520px) {
+  .row { flex-wrap: wrap; }
+  .row input { flex-basis: 100%; }
+  .title-actions .hide-sm { display: none; }
+}
+@media (min-width: 820px) {
+  .body { display: grid; grid-template-columns: 1fr 1fr; grid-template-areas:
+    "src src" "save save" "adv adv" "act act" "gauge gauge" "log log"; }
+  .body > * { min-width: 0; }
+}
+</style>
+</head>
+<body>
+<div class="window">
+  <!-- 标题栏 -->
+  <div class="titlebar">
+    <div class="brand">
+      <div class="brand-mark">AS</div>
+      <div>
+        <div class="brand-name">AutoSlice-download</div>
+        <div class="brand-sub">multi-segment downloader</div>
+      </div>
+    </div>
+    <div class="title-actions">
+      <button class="icon-btn" id="themeBtn" title="切换深色/浅色">◐</button>
+      <button class="icon-btn hide-sm" title="最小化">—</button>
+      <button class="icon-btn hide-sm" title="关闭">✕</button>
+    </div>
+  </div>
+
+  <!-- 模拟保存位置对话框 -->
+  <div class="modal-mask" id="dlgMask" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+      <div class="modal-head">
+        <span id="dlgTitle">保存到</span>
+        <button class="icon-btn" id="dlgClose" title="关闭">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="loc-bar" id="locBar"></div>
+        <div class="loc-list" id="locList"></div>
+        <div class="adv-field">
+          <label>自定义路径</label>
+          <input type="text" id="dlgCustom" spellcheck="false" placeholder="D:\Downloads\">
+        </div>
+        <div class="adv-field">
+          <label>文件名</label>
+          <input type="text" id="dlgName" spellcheck="false">
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="dlgCancel">取消</button>
+        <button class="btn btn-primary" id="dlgOk">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 内容 -->
+  <div class="body">
+    <!-- 下载源 -->
+    <section class="section">
+      <div class="section-head">
+        <span class="section-title">下载源</span>
+        <span class="section-hint">每行一个地址，多源自动容错</span>
+      </div>
+      <textarea id="urls" spellcheck="false" placeholder="https://mirror-a.com/file.bin&#10;https://mirror-b.com/file.bin">https://mirror-a.com/file.bin
+https://mirror-b.com/file.bin</textarea>
+    </section>
+
+    <!-- 保存位置 -->
+    <section class="section">
+      <div class="section-head">
+        <span class="section-title">保存位置</span>
+        <span class="section-hint">留空自动取 URL 文件名</span>
+      </div>
+      <div class="row">
+        <input type="text" id="path" value="D:\Downloads\demo.bin" spellcheck="false">
+        <button class="btn" id="browseBtn">浏览...</button>
+      </div>
+    </section>
+
+    <!-- 高级选项 -->
+    <section class="section">
+      <details>
+        <summary>高级选项</summary>
+        <div class="adv-grid">
+          <div class="adv-field"><label>线程上限（0 = 自动）</label><input id="optThreads" value="0" inputmode="numeric"></div>
+          <div class="adv-field"><label>限速 KB/s（-1 不限）</label><input id="optSpeed" value="-1" inputmode="numeric"></div>
+          <div class="adv-field"><label>重试次数</label><input id="optRetry" value="3" inputmode="numeric"></div>
+          <div class="adv-field"><label>重试间隔 ms</label><input id="optDelay" value="1000" inputmode="numeric"></div>
+        </div>
+      </details>
+    </section>
+
+    <!-- 操作 -->
+    <div class="actions">
+      <button class="btn btn-primary" id="startBtn">开始下载</button>
+      <button class="btn" id="cancelBtn" disabled>取消</button>
+    </div>
+
+    <!-- 进度 -->
+    <section class="gauge">
+      <div class="gauge-top">
+        <span class="gauge-label">进度</span>
+        <span class="led led-idle" id="led"><span class="dot"></span><span id="ledText">就绪</span></span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
+      <div class="metrics">
+        <div class="metric"><div class="k">已下载</div><div class="v" id="mDone">0 <small>MB</small></div></div>
+        <div class="metric"><div class="k">总大小</div><div class="v" id="mTotal">300 <small>MB</small></div></div>
+        <div class="metric"><div class="k">速度</div><div class="v" id="mSpeed">— <small>MB/s</small></div></div>
+        <div class="metric"><div class="k">剩余时间</div><div class="v" id="mEta">— <small></small></div></div>
+      </div>
+    </section>
+
+    <!-- 日志 -->
+    <section class="section">
+      <div class="section-head"><span class="section-title">日志</span></div>
+      <div class="log-box" id="log"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const logBox = $('log');
+
+  /* ============ WebView2 桥接（嵌入时启用） ============ */
+  const wv = (window.chrome && window.chrome.webview) || null;
+  function send(cmd, payload) {
+    if (wv) wv.postMessage(JSON.stringify(Object.assign({ cmd: cmd }, payload || {})));
+  }
+  if (wv) {
+    wv.addEventListener('message', e => {
+      let m = e.data;
+      if (typeof m === 'string') { try { m = JSON.parse(m); } catch (_) { return; } }
+      if (!m || !m.type) return;
+      switch (m.type) {
+        case 'state':
+          setPhase(m.phase);
+          if (m.text) $('ledText').textContent = m.text;
+          break;
+        case 'progress':
+          state.done = m.done; state.total = m.total; state.speed = m.speed;
+          render();
+          break;
+        case 'log': log(m.text, m.cls); break;
+        case 'path': $('path').value = m.path || ''; break;
+        case 'busy':
+          state.running = !!m.busy;
+          $('startBtn').disabled = m.busy;
+          $('cancelBtn').disabled = !m.busy;
+          if (!m.busy) { $('bar').style.width = '0%'; }
+          break;
+      }
+    });
+  }
+
+  const state = {
+    total: 300 * 1024 * 1024,
+    done: 0,
+    speed: 0,
+    running: false,
+    timer: null,
+    phase: 'idle', // idle | busy | ok | err | cancel
+  };
+
+  function setLed(cls, text) {
+    const led = $('led');
+    led.className = 'led led-' + cls;
+    $('ledText').textContent = text;
+  }
+  function setPhase(p) {
+    const map = {
+      idle:   ['idle', '就绪'],
+      busy:   ['busy', '下载中'],
+      ok:     ['ok', '完成'],
+      err:    ['err', '失败'],
+      cancel: ['cancel', '取消清理'],
+    };
+    state.phase = p;
+    setLed(map[p][0], map[p][1]);
+    $('bar').classList.toggle('indet', p === 'busy' && state.total <= 0);
+  }
+  function fmtBytes(b) {
+    const mb = b / 1048576;
+    return mb >= 1024 ? (mb / 1024).toFixed(2) + ' GB' : mb.toFixed(2) + ' MB';
+  }
+  function render() {
+    const pct = state.total > 0 ? Math.min(100, state.done / state.total * 100) : 0;
+    $('bar').style.width = pct + '%';
+    $('mDone').innerHTML = fmtBytes(state.done).replace(/ (MB|GB)$/, ' <small>$1</small>');
+    $('mTotal').innerHTML = state.total > 0 ? fmtBytes(state.total).replace(/ (MB|GB)$/, ' <small>$1</small>') : '— <small></small>';
+    if (state.speed > 0) {
+      $('mSpeed').innerHTML = (state.speed / 1048576).toFixed(2) + ' <small>MB/s</small>';
+      const remain = state.total > 0 ? (state.total - state.done) / state.speed : 0;
+      $('mEta').innerHTML = remain > 0 ? Math.ceil(remain) + ' <small>秒</small>' : '— <small></small>';
+    } else {
+      $('mSpeed').innerHTML = '— <small>MB/s</small>';
+      $('mEta').innerHTML = '— <small></small>';
+    }
+  }
+  function log(msg, cls) {
+    const div = document.createElement('div');
+    if (cls) div.className = cls;
+    div.textContent = msg;
+    logBox.appendChild(div);
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  function start() {
+    if (state.running) return;
+    state.running = true;
+    state.done = 0;
+    state.speed = 0;
+    setPhase('busy');
+    $('startBtn').disabled = true;
+    $('cancelBtn').disabled = false;
+    logBox.innerHTML = '';
+    log('探测：300.00 MB（支持 Range）', 'info');
+    log('启动 8 个分片线程，等待数据...', 'info');
+    render();
+    let last = performance.now();
+    let lastDone = 0;
+    const base = state.total / 90; // 90 秒播完
+    state.timer = setInterval(() => {
+      const now = performance.now();
+      const dt = (now - last) / 1000;
+      last = now;
+      state.done = Math.min(state.total, state.done + base * dt * (0.7 + Math.random() * 0.6));
+      state.speed = (state.done - lastDone) / dt;
+      lastDone = state.done;
+      if (state.done >= state.total) { finish(); return; }
+      render();
+    }, 120);
+  }
+  function finish() {
+    clearInterval(state.timer);
+    state.running = false;
+    state.done = state.total;
+    state.speed = 0;
+    setPhase('ok');
+    $('startBtn').disabled = false;
+    $('cancelBtn').disabled = true;
+    log('完成：demo.bin（300.00 MB）', 'ok');
+    render();
+  }
+  function cancel() {
+    if (!state.running) return;
+    clearInterval(state.timer);
+    state.running = false;
+    setPhase('cancel');
+    $('startBtn').disabled = false;
+    $('cancelBtn').disabled = true;
+    log('已取消，清理分片残留...', 'info');
+    setTimeout(() => { state.done = 0; setPhase('idle'); render(); }, 900);
+  }
+  function fail() {
+    if (state.running) { clearInterval(state.timer); state.running = false; }
+    setPhase('err');
+    $('startBtn').disabled = false;
+    $('cancelBtn').disabled = true;
+    log('错误：所有源探测文件大小均失败：', 'err');
+    log('  https://example.com/file.bin (HTTP 404)', 'err');
+  }
+
+  $('startBtn').addEventListener('click', () => {
+    if (wv) {
+      send('start', {
+        urls: $('urls').value,
+        path: $('path').value,
+        threads: $('optThreads').value,
+        speedCap: $('optSpeed').value,
+        retry: $('optRetry').value,
+        delay: $('optDelay').value,
+      });
+    } else { start(); }
+  });
+  $('cancelBtn').addEventListener('click', () => { if (wv) send('cancel'); else cancel(); });
+  /* ---- 模拟保存位置对话框（原型）---- */
+  const LOCS = [
+    { name: 'D:\\Downloads', icon: 'drive', sub: '下载' },
+    { name: 'D:\\桌面', icon: 'drive', sub: '桌面' },
+    { name: 'D:\\文档', icon: 'drive', sub: '文档' },
+    { name: 'D:\\视频', icon: 'drive', sub: '视频' },
+  ];
+  function defaultFileName() {
+    const first = $('urls').value.split(/\r?\n/)[0].trim();
+    const m = first.match(/\/([^/?#]+)(?:[?#]|$)/);
+    return m ? m[1] : 'download.bin';
+  }
+  function openDlg() {
+    const cur = $('path').value;
+    const slash = Math.max(cur.lastIndexOf('\\'), cur.lastIndexOf('/'));
+    const dir = slash >= 0 ? cur.slice(0, slash) : 'D:\\Downloads';
+    const name = slash >= 0 ? cur.slice(slash + 1) : defaultFileName();
+    $('dlgCustom').value = dir;
+    $('dlgName').value = name;
+    renderLoc(dir, name);
+    $('dlgMask').hidden = false;
+    $('dlgName').focus();
+    $('dlgName').select();
+  }
+  function renderLoc(dir, name) {
+    $('locBar').innerHTML = '<span class="crumb">' + dir.replace(/\\/g, '<span class="crumb">\\</span><span class="crumb">') + '</span>';
+    $('locList').innerHTML = '';
+    LOCS.forEach(l => {
+      const item = document.createElement('div');
+      item.className = 'loc-item' + (l.name === dir ? ' cur' : '');
+      item.innerHTML = '<span class="ic ' + l.icon + '"></span>' + l.name;
+      item.addEventListener('click', () => {
+        $('dlgCustom').value = l.name;
+        renderLoc(l.name, $('dlgName').value);
+      });
+      $('locList').appendChild(item);
+    });
+    $('locList').appendChild((() => {
+      const d = document.createElement('div');
+      d.className = 'loc-item';
+      d.innerHTML = '<span class="ic drive"></span>选择其他位置…';
+      d.addEventListener('click', () => $('dlgCustom').focus());
+      return d;
+    })());
+    $('dlgName').value = name || defaultFileName();
+  }
+  function closeDlg() { $('dlgMask').hidden = true; }
+
+  $('browseBtn').addEventListener('click', () => { if (wv) send('browse'); else openDlg(); });
+  $('dlgClose').addEventListener('click', closeDlg);
+  $('dlgCancel').addEventListener('click', closeDlg);
+  $('dlgMask').addEventListener('click', e => { if (e.target === $('dlgMask')) closeDlg(); });
+  $('dlgOk').addEventListener('click', () => {
+    const dir = $('dlgCustom').value.trim().replace(/[\\/]+$/, '');
+    const name = $('dlgName').value.trim() || defaultFileName();
+    if (dir) { $('path').value = dir + '\\' + name; log('已选择保存位置：' + dir + '\\' + name, 'info'); }
+    closeDlg();
+  });
+  $('dlgCustom').addEventListener('change', () => renderLoc($('dlgCustom').value.trim(), $('dlgName').value));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('dlgMask').hidden) { e.preventDefault(); closeDlg(); }
+  });
+
+  // 演示：F 键模拟失败，S 键模拟完成（便于展示状态流转）
+  document.addEventListener('keydown', e => {
+    if (e.key === 'f' || e.key === 'F') fail();
+    if (e.key === 's' || e.key === 'S') finish();
+  });
+
+  // 深色模式
+  $('themeBtn').addEventListener('click', () => {
+    const root = document.documentElement;
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+  });
+
+  // 粘贴多 URL 自动拆行
+  $('urls').addEventListener('paste', e => {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text');
+    const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const ta = $('urls');
+    if (lines.length > 1 && lines.every(l => /^https?:\/\//i.test(l))) {
+      ta.value = lines.join('\n');
+    } else {
+      ta.value += text;
+    }
+  });
+
+  log('界面原型就绪 — 点「开始下载」模拟进度；Esc/取消演示取消；按 F 演示失败；按 S 演示完成', 'info');
+})();
+</script>
+</body>
+</html>
