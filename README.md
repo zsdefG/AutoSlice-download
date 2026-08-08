@@ -140,3 +140,4 @@ downloader.exe http://127.0.0.1:8123/big_src.bin out.bin --retry 3 --retry-delay
 ```
 
 已覆盖验证：12MB/300MB 哈希匹配、慢速服务器自动加线程提速约 10 倍、坏源排前自动切换、chunked 流式下载、404 快速失败、2 次 500 后重试成功、下载中断零残留、Ctrl+C 中断清理。
+# AutoSlice-download
