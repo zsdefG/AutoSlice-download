@@ -1,19 +1,24 @@
 # lifecycle_test.py - 完整下载生命周期清理测试
 # 流程: 启动慢速下载 -> 杀服务器(网络故障) -> 等待失败清理 -> 检查残留
 import subprocess, time, glob, os
+from pathlib import Path
+
+# 基于脚本自身位置定位 (不硬编码本机路径): 假设 exe 在 ../build/
+BASE = Path(__file__).resolve().parent
+DOWNLOADER = BASE.parent / 'build' / 'downloader.exe'
 
 def main():
     # 清理旧文件
-    for f in glob.glob('outLife*'):
+    for f in glob.glob(str(BASE / 'outLife*')):
         try: os.remove(f)
         except OSError: pass
 
     # 1. 启动下载 (慢速 300MB, 100+ 秒才能完成)
     proc = subprocess.Popen(
-        [r'D:\文档\workbuddy\pydemo\cpp_downloader\build\downloader.exe',
+        [str(DOWNLOADER),
          'http://127.0.0.1:8123/big_src.bin', 'outLife.bin', '--retry', '1'],
-        cwd=r'D:\文档\workbuddy\pydemo\cpp_downloader\test',
-        stdout=open('dlLife.txt', 'wb'), stderr=subprocess.STDOUT,
+        cwd=str(BASE),
+        stdout=open(BASE / 'dlLife.txt', 'wb'), stderr=subprocess.STDOUT,
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
     )
     time.sleep(8)
@@ -30,8 +35,8 @@ def main():
     print(f'[3] 下载器退出码 = {rc}')
 
     # 4. 检查残留
-    parts = glob.glob('outLife.bin.part*')
-    out = glob.glob('outLife.bin')
+    parts = glob.glob(str(BASE / 'outLife.bin.part*'))
+    out = glob.glob(str(BASE / 'outLife.bin'))
     print(f'[4] 残留分片数 = {len(parts)}, 半成品输出 = {len(out)}')
     if not parts and not out and rc is not None:
         print('结论: 通过 - 下载失败后当场清理, 零残留')

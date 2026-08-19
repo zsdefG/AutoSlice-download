@@ -44,6 +44,55 @@ static std::atomic<std::int64_t> g_done{0}, g_total{0}, g_speed{0}, g_last_post_
 #define WM_APP_DONE     (WM_APP + 3)
 #define WM_APP_INIT     (WM_APP + 4)
 
+// 运行时定位 WebView2 Runtime 目录 (不硬编码安装路径/版本号)
+// 枚举两个标准安装位置下 Application 的版本子目录, 取版本号最大者
+static std::wstring FindWebView2RuntimeDir() {
+    const wchar_t* roots[] = {
+        L"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application",
+        L"C:\\Program Files\\Microsoft\\EdgeWebView\\Application",
+    };
+    auto ParseVersion = [](const wchar_t* s, unsigned long out[4]) -> bool {
+        int seg = 0; unsigned long cur = 0; bool any = false;
+        for (const wchar_t* p = s; *p && seg < 4; ++p) {
+            if (*p == L'.') { out[seg++] = cur; cur = 0; any = false; continue; }
+            if (*p < L'0' || *p > L'9') return false;
+            cur = cur * 10 + (*p - L'0');
+            any = true;
+        }
+        if (!any && seg == 0) return false;
+        if (seg < 4) { out[seg++] = cur; }
+        while (seg < 4) out[seg++] = 0;
+        return true;
+    };
+    auto Newer = [](const unsigned long a[4], const unsigned long b[4]) -> bool {
+        for (int i = 0; i < 4; ++i) {
+            if (a[i] != b[i]) return a[i] > b[i];
+        }
+        return false;
+    };
+    std::wstring best;
+    unsigned long bestVer[4] = {0, 0, 0, 0};
+    for (const wchar_t* root : roots) {
+        WIN32_FIND_DATAW fd;
+        HANDLE hFind = FindFirstFileW((std::wstring(root) + L"\\*").c_str(), &fd);
+        if (hFind == INVALID_HANDLE_VALUE) continue;
+        do {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+            unsigned long v[4];
+            if (!ParseVersion(fd.cFileName, v)) continue;
+            // 该版本目录下必须存在浏览器可执行文件
+            if (GetFileAttributesW((std::wstring(root) + L"\\" + fd.cFileName + L"\\msedgewebview2.exe").c_str())
+                    == INVALID_FILE_ATTRIBUTES) continue;
+            if (best.empty() || Newer(v, bestVer)) {
+                best = std::wstring(root) + L"\\" + fd.cFileName;
+                for (int i = 0; i < 4; ++i) bestVer[i] = v[i];
+            }
+        } while (FindNextFileW(hFind, &fd));
+        FindClose(hFind);
+    }
+    return best;
+}
+
 // ===== 工具 =====
 static std::wstring g_exeDir;
 static void DebugLog(const wchar_t* tag, const std::wstring& msg) {
@@ -265,13 +314,31 @@ public:
                 EventRegistrationToken token{};
                 g_wv->add_WebMessageReceived(&msgHandler, &token);
 
-                // 导航到本地原型
+                // 导航到本地原型: 同目录优先, 回退上级目录 (不依赖固定目录结构)
                 wchar_t path[MAX_PATH] = {};
                 GetModuleFileNameW(nullptr, path, MAX_PATH);
                 std::wstring dir(path);
                 auto slash = dir.find_last_of(L'\\');
                 dir = dir.substr(0, slash);
-                std::wstring uri = L"file:///" + dir + L"/../prototype/index.html";
+                std::wstring uri;
+                const wchar_t* cands[] = {
+                    L"\\prototype\\index.html",      // 发布布局: exe 与 prototype 同目录
+                    L"\\..\\prototype\\index.html",  // 开发布局: exe 在 build/ 下
+                };
+                for (auto c : cands) {
+                    std::wstring p = dir + c;
+                    if (GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                        std::wstring fw;
+                        for (wchar_t ch : p) fw += (ch == L'\\') ? L'/' : ch;  // file URI 用正斜杠
+                        uri = L"file:///" + fw;
+                        break;
+                    }
+                }
+                if (uri.empty()) {
+                    MessageBoxW(g_hwnd, L"未找到 prototype/index.html（请将原型文件放在 exe 同目录）",
+                                L"AutoSlice", MB_OK | MB_ICONERROR);
+                    return S_OK;
+                }
                 DebugLog(L"nav", uri);
                 g_wv->Navigate(uri.c_str());
                 return S_OK;
@@ -300,10 +367,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
             {
                 static EnvCreatedHandler envHandler;
-                // 显式指定 WebView2 Runtime 目录 (browserExecutableFolder 是包含 msedgewebview2.exe 的目录)
-                std::wstring wvDir = L"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\140.0.3485.94";
-                HRESULT hr = g_createEnv(wvDir.c_str(), &envHandler);
-                DebugLog(L"wmain", L"create env: " + std::to_wstring(hr));
+                // 运行时定位 WebView2 Runtime 目录: 枚举两个安装位置的版本目录, 取最新
+                std::wstring wvDir = FindWebView2RuntimeDir();
+                HRESULT hr = g_createEnv(wvDir.empty() ? nullptr : wvDir.c_str(), &envHandler);
+                DebugLog(L"wmain", L"create env: " + std::to_wstring(hr) + L" dir=" + (wvDir.empty() ? L"<默认>" : wvDir));
             }
             return 0;
 

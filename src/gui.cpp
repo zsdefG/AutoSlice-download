@@ -300,7 +300,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             SetWindowTextW(GetDlgItem(hwnd, IDC_START_BTN), L"开始下载");
             SetWindowTextW(GetDlgItem(hwnd, IDC_CANCEL_BTN), L"取消");
             SetWindowTextW(GetDlgItem(hwnd, IDC_BROWSE_BTN), L"浏览...");
-            SetWindowTextW(GetDlgItem(hwnd, IDC_PATH_EDIT), L"D:\\Downloads\\demo.bin");
+            // 输出路径默认留空: 引擎自动取 URL 文件名 (不硬编码本机目录)
 
             // 标签位置 (固定行, 由 Layout 之后的 MoveWindow 控制)
             // 简化为在 Layout 里同步移动标签
