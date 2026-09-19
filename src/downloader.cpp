@@ -80,7 +80,8 @@ bool HttpDownloadRange(const std::string& url,
                        const std::function<bool(const char*, size_t)>& on_data,
                        std::string* err_out,
                        std::int64_t speed_cap,
-                       std::atomic<std::int64_t>& token_left) {
+                       std::atomic<std::int64_t>& token_left,
+                       int receive_timeout_ms) {
     std::wstring host, path;
     INTERNET_PORT port = 0;
     bool use_ssl = false;
@@ -155,9 +156,10 @@ bool HttpDownloadRange(const std::string& url,
         return false;
     }
 
-    // 设置较短的超时, 使 Ctrl+C 取消时阻塞的 WinHttpReadData 能较快返回
-    DWORD timeout_ms = 5000;
-    WinHttpSetTimeouts(hReq, timeout_ms, timeout_ms, timeout_ms, timeout_ms);
+    // 设置超时: 连接/发送保持较短, 接收(读取数据阶段)可配置以便慢速/高延迟源不频繁误断流。
+    // Ctrl+C 取消时阻塞的 WinHttpReadData 能较快返回 (接收超时兜底).
+    DWORD rt = (DWORD)(receive_timeout_ms > 0 ? receive_timeout_ms : 5000);
+    WinHttpSetTimeouts(hReq, 5000, 5000, 5000, rt);
 
     // 读取数据
     char buf[64 * 1024];
@@ -208,13 +210,13 @@ bool DownloadTask::ProbeWithRange(std::int64_t* size_out, bool* supports_range) 
         INTERNET_PORT port = 0;
         bool use_ssl = false;
         if (!ParseUrl(src->url, &host, &path, &port, &use_ssl)) {
-            src->failed = true;
+            MarkSourceFailure(src.get(), "URL 解析失败");
             fail_reasons.push_back(src->url + " (URL 解析失败)");
             continue;
         }
         HINTERNET hSession = WinHttpOpen(L"PCL-Downloader/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, nullptr, nullptr, 0);
         if (!hSession) {
-            src->failed = true;
+            MarkSourceFailure(src.get(), "WinHttpOpen: " + GetLastErrorStr());
             fail_reasons.push_back(src->url + " (WinHttpOpen: " + GetLastErrorStr() + ")");
             continue;
         }
@@ -222,7 +224,7 @@ bool DownloadTask::ProbeWithRange(std::int64_t* size_out, bool* supports_range) 
         if (!hConnect) {
             reason = "WinHttpConnect: " + GetLastErrorStr();
             WinHttpCloseHandle(hSession);
-            src->failed = true;
+            MarkSourceFailure(src.get(), reason);
             fail_reasons.push_back(src->url + " (" + reason + ")");
             continue;
         }
@@ -232,7 +234,7 @@ bool DownloadTask::ProbeWithRange(std::int64_t* size_out, bool* supports_range) 
         if (!hReq) {
             reason = "WinHttpOpenRequest: " + GetLastErrorStr();
             WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
-            src->failed = true;
+            MarkSourceFailure(src.get(), reason);
             fail_reasons.push_back(src->url + " (" + reason + ")");
             continue;
         }
@@ -290,7 +292,7 @@ bool DownloadTask::ProbeWithRange(std::int64_t* size_out, bool* supports_range) 
             *supports_range = range_ok;
             return true;
         }
-        src->failed = true;  // 该源探测失败, 标记后试下一个
+        MarkSourceFailure(src.get(), reason);  // 该源探测失败, 记录后试下一个
         fail_reasons.push_back(src->url + " (" + reason + ")");
     }
     error_ = "所有源探测文件大小均失败:\n";
@@ -343,6 +345,31 @@ bool DownloadTask::HasAvailableSource() const {
     for (auto& s : sources)
         if (!s->failed.load()) return true;
     return false;
+}
+
+// 判定错误是否为永久性失败 (4xx 客户端/URL 解析错误), 网络/超时/5xx 视为临时
+static bool IsPermanentFailure(const std::string& err) {
+    if (err.find("URL 解析失败") != std::string::npos) return true;
+    auto pos = err.find("HTTP ");
+    if (pos == std::string::npos) return false;
+    int code = atoi(err.c_str() + pos + 5);
+    return code >= 400 && code < 500;
+}
+
+void DownloadTask::MarkSourceSuccess(Source* s) {
+    s->temp_fail.store(0);
+}
+
+void DownloadTask::MarkSourceFailure(Source* s, const std::string& err) {
+    if (s->failed.load()) return;
+    if (IsPermanentFailure(err)) {
+        s->failed = true;   // 4xx/URL 错误: 重试无意义, 直接拉黑
+        return;
+    }
+    // 临时失败 (超时/网络/5xx): 累计, 满阈值才拉黑, 防止单次抖动永久封禁
+    if (s->temp_fail.fetch_add(1) + 1 >= kTempFailLimit) {
+        s->failed = true;
+    }
 }
 
 std::int64_t DownloadTask::TotalDone() const {
@@ -497,11 +524,13 @@ void DownloadEngine::Worker(Ctx ctx) {
                 piece.done.fetch_add((std::int64_t)wlen);
                 return unknown_size || pos + (std::int64_t)wlen <= end;  // 未知大小: 读到 EOF
             },
-            &err, engine.opt.speed_cap, engine.tokens);
+            &err, engine.opt.speed_cap, engine.tokens, engine.opt.receive_timeout_ms);
 
         fclose(part);
 
         if (ok) {
+            // 源工作正常 (读到数据/正常收尾): 清零其临时失败计数
+            task.MarkSourceSuccess(src);
             if (unknown_size) {
                 // 未知大小: 连接正常读到 EOF 即完成 (失败换源由 else 分支处理)
                 piece.finished = true;
@@ -513,12 +542,12 @@ void DownloadEngine::Worker(Ctx ctx) {
                 piece.finished = true;
                 break;
             }
-            // 未下完但连接正常结束 → 服务器提前断流, 换源重试
-            src->failed = true;
+            // 未下完但连接正常结束 → 服务器提前断流 (临时), 换源重试
+            task.MarkSourceFailure(src, "服务器提前断流");
             source_id = src->id + 1;
         } else {
-            // 该源失败 → 换下一个源, 从断点继续
-            src->failed = true;
+            // 该源下载失败 (永久 4xx 直接拉黑; 网络/超时/5xx 连续多次才拉黑) → 换下一个源
+            task.MarkSourceFailure(src, err);
             source_id = src->id + 1;
         }
     }
@@ -726,7 +755,13 @@ int DownloadEngine::DownloadOnce(std::vector<std::string> urls, const std::strin
             std::int64_t now_ms = GetTickCount64();
             if (now_ms - last_ms >= 200) {
                 std::int64_t dt = now_ms - last_ms;
-                if (dt > 0) speed = (now_done - last_done) * 1000 / dt;
+                if (dt > 0) {
+                    // 瞬时速度
+                    std::int64_t inst = (now_done - last_done) * 1000 / dt;
+                    // 滑动平均 (EMA, alpha≈0.25): 平滑公网瞬时抖动, 避免加线程/饱和判定反复横跳
+                    std::int64_t prev = speed.load();
+                    speed = (prev <= 0) ? inst : (prev - prev / 4) + inst / 4;
+                }
                 last_done = now_done;
                 last_ms = now_ms;
             }

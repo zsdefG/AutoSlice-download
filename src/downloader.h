@@ -25,7 +25,11 @@ struct Source {
     std::string url;
     int id = 0;
     std::atomic<bool> failed{false};
+    std::atomic<int> temp_fail{0};   // 连续临时失败次数 (超时/网络/5xx), 达到阈值才真正拉黑
 };
+
+// 临时失败连续多少次才把该源真正标记为失败 (防止单次网络抖动永久拉黑)
+constexpr int kTempFailLimit = 3;
 
 // ===== 分片 (对应 PCL NetThread) =====
 struct Piece {
@@ -59,6 +63,12 @@ public:
     Source* GetSource(std::int64_t from_id);
     // 是否存在可用源
     bool HasAvailableSource() const;
+
+    // 记录某源一次成功 (清空其临时失败计数)
+    void MarkSourceSuccess(Source* s);
+    // 记录某源一次失败. 4xx/URL 错误等为永久失败 → 直接拉黑;
+    // 网络/超时/5xx 等为临时失败 → 达到 kTempFailLimit 次才拉黑.
+    void MarkSourceFailure(Source* s, const std::string& err);
 
     // 全部分片完成时合并到目标文件
     bool MergeFiles();
@@ -97,6 +107,7 @@ struct DownloadOptions {
     int poll_ms = 20;                          // 调度轮询间隔
     int max_retries = 3;                       // 下载失败后的总尝试次数 (含首次; 1 = 不重试)
     int retry_delay_ms = 1000;                 // 每次重试前等待毫秒
+    int receive_timeout_ms = 15000;            // HTTP 读取数据阶段超时 (ms); 慢速/高延迟源可调大降低误断流
     std::atomic<bool>* cancel_flag = nullptr;  // 非空时, 调度/下载循环定期检查, true 则立即取消
     bool quiet = false;                        // 不打印日志
     std::function<void(std::int64_t done, std::int64_t total, std::int64_t speed_bps)> on_progress;
@@ -158,6 +169,7 @@ bool HttpDownloadRange(const std::string& url,
                        const std::function<bool(const char* data, size_t len)>& on_data,
                        std::string* err_out,
                        std::int64_t speed_cap,   // 全局令牌桶
-                       std::atomic<std::int64_t>& token_left);
+                       std::atomic<std::int64_t>& token_left,
+                       int receive_timeout_ms = 15000);
 
 }  // namespace pcl_dl
